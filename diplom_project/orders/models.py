@@ -1,3 +1,4 @@
+from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 
@@ -18,12 +19,15 @@ USER_TYPE_CHOICES = (
 )
 
 
-class User(models.Model):
-    email = models.EmailField(verbose_name='Почта', unique=True)
-    password = models.CharField(verbose_name='Пароль', max_length=20)
+class CustomUser(AbstractUser):
+
+    REQUIRED_FIELDS = []
+    USERNAME_FIELD = 'email'
+    email = models.EmailField(verbose_name='Email', unique=True)
+    type = models.CharField(verbose_name='User type', choices=USER_TYPE_CHOICES, max_length=5, default='buyer')
 
     def __str__(self):
-        return f'{self.email} {self.password}'
+        return f'{self.email}'
 
     class Meta:
         verbose_name = 'Пользователь'
@@ -122,7 +126,7 @@ class ProductParameter(models.Model):
 
 
 class Contact(models.Model):
-    user = models.ForeignKey(User, verbose_name='Пользователь',
+    user = models.ForeignKey(CustomUser, verbose_name='Пользователь',
                              related_name='contacts', blank=True,
                              on_delete=models.CASCADE)
 
@@ -143,7 +147,7 @@ class Contact(models.Model):
 
 
 class Order(models.Model):
-    user = models.ForeignKey(User, verbose_name='Пользователь',
+    user = models.ForeignKey(CustomUser, verbose_name='Пользователь',
                              related_name='orders', blank=True,
                              on_delete=models.CASCADE)
     dt = models.DateTimeField(auto_now_add=True)
