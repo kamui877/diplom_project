@@ -1,5 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.utils.translation import gettext_lazy as _
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
 
 
 STATE_CHOICES = (
@@ -23,11 +25,21 @@ class CustomUser(AbstractUser):
 
     REQUIRED_FIELDS = []
     USERNAME_FIELD = 'email'
-    email = models.EmailField(verbose_name='Email', unique=True)
-    type = models.CharField(verbose_name='User type', choices=USER_TYPE_CHOICES, max_length=5, default='buyer')
+    email = models.EmailField(verbose_name='Почта', unique=True)
+    type = models.CharField(verbose_name='Тип пользователя', choices=USER_TYPE_CHOICES, max_length=5, default='buyer')
+    company = models.CharField(verbose_name='Компания', max_length=40, blank=True)
+    position = models.CharField(verbose_name='Должность', max_length=40, blank=True)
+    is_active = models.BooleanField(
+        _('active'),
+        default=False,
+        help_text=_(
+            'Designates whether this user should be treated as active. '
+            'Unselect this instead of deleting accounts.'
+        ),
+    )
 
     def __str__(self):
-        return f'{self.email}'
+        return f'{self.first_name} {self.last_name}'
 
     class Meta:
         verbose_name = 'Пользователь'
@@ -39,6 +51,9 @@ class Shop(models.Model):
     name = models.CharField(max_length=50, verbose_name='Название')
     url = models.URLField(verbose_name='Ссылка', null=True, blank=True)
     state = models.BooleanField(verbose_name='статус получения заказов', default=True)
+    user = models.OneToOneField(CustomUser, verbose_name='Пользователь',
+                                blank=True, null=True,
+                                on_delete=models.CASCADE)
 
     # filename
 
@@ -184,3 +199,42 @@ class OrderItem(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['order_id', 'product_info'], name='unique_order_item'),
         ]
+
+
+class ConfirmEmailToken(models.Model):
+    class Meta:
+        verbose_name = 'Токен подтверждения Email'
+        verbose_name_plural = 'Токены подтверждения Email'
+
+    user = models.ForeignKey(
+        CustomUser,
+        related_name='confirm_email_tokens',
+        on_delete=models.CASCADE,
+        verbose_name=_("The User which is associated to this password reset token")
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_("When was this token generated")
+    )
+
+    # Key field, though it is not the primary key of the model
+    key = models.CharField(
+        _("Key"),
+        max_length=64,
+        db_index=True,
+        unique=True
+    )
+
+    def generate_key(self):
+        generator = PasswordResetTokenGenerator()
+        return generator.make_token(user=self.user)
+
+    def save(self, *args, **kwargs):
+        if not self.key:
+            self.key = self.generate_key()
+        return super(ConfirmEmailToken, self).save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Password reset token for user {self.user}"
+

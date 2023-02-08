@@ -1,26 +1,48 @@
-import yaml
+from django.shortcuts import render, redirect
+from yaml import load as load_yaml, Loader
 from django.core.validators import URLValidator
 from django.http import JsonResponse
-from django.urls import reverse_lazy
-from django.views.generic import CreateView
 from requests import get
 from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
 
-from orders.models import CustomUser, Shop, Category, ProductInfo, Product, Parameter, ProductParameter
+from orders.models import CustomUser, Shop, Category, ProductInfo, Product, Parameter, ProductParameter, ConfirmEmailToken
 from orders.forms import CustomUserCreationForm
+from orders.signal import new_user_registered
 
 
-class SignUpView(CreateView):
-    form_class = CustomUserCreationForm
-    success_url = reverse_lazy('login')
-    template_name = 'orders/register.html'
+class RegisterAccount(APIView):
+
+    def get(self, request):
+        form = CustomUserCreationForm()
+        return render(request, 'orders/register.html', {'form': form})
+
+    def post(self, request, *args, **kwargs):
+        form = CustomUserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            new_user_registered.send(sender=self.__class__, user_id=user.id)
+            return redirect('/user/register/confirm')
+        else:
+            return JsonResponse({'Status': False, 'Errors': form.errors})
 
 
-def load_yaml(stream, Loader):
-    with open(stream) as file:
-        data = yaml.load(file, Loader)
-        return data
+class ConfirmAccount(APIView):
+    def post(self, request, *args, **kwargs):
+
+        if {'email', 'token'}.issubset(request.data):
+
+            token = ConfirmEmailToken.objects.filter(user__email=request.data['email'],
+                                                     key=request.data['token']).first()
+            if token:
+                token.user.is_active = True
+                token.user.save()
+                token.delete()
+                return JsonResponse({'Status': True})
+            else:
+                return JsonResponse({'Status': False, 'Errors': 'Неправильно указан токен или email'})
+
+        return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
 
 
 class PartnerUpdate(APIView):
@@ -41,7 +63,7 @@ class PartnerUpdate(APIView):
             else:
                 stream = get(url).content
 
-                data = load_yaml(stream, Loader=yaml.Loader)
+                data = load_yaml(stream, Loader=Loader)
 
                 shop, _ = Shop.objects.get_or_create(name=data['shop'], user_id=request.user.id)
                 for category in data['categories']:
