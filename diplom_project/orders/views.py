@@ -1,14 +1,21 @@
-from django.shortcuts import render, redirect
 from yaml import load as load_yaml, Loader
+from requests import get
+from django.contrib.auth import login
+from django.contrib.sites.shortcuts import get_current_site
+from django.core.mail import EmailMessage
+from django.shortcuts import render
+from django.template.loader import render_to_string
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.core.validators import URLValidator
 from django.http import JsonResponse
-from requests import get
 from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
 
-from orders.models import CustomUser, Shop, Category, ProductInfo, Product, Parameter, ProductParameter, ConfirmEmailToken
+from orders.models import CustomUser, Shop, Category, ProductInfo, Product, Parameter, ProductParameter
 from orders.forms import CustomUserCreationForm
-from orders.signal import new_user_registered
+from orders.tokens import account_activation_token
+from diplom_project.settings import EMAIL_HOST_USER
 
 
 class RegisterAccount(APIView):
@@ -21,28 +28,38 @@ class RegisterAccount(APIView):
         form = CustomUserCreationForm(request.POST)
         if form.is_valid():
             user = form.save()
-            new_user_registered.send(sender=self.__class__, user_id=user.id)
-            return redirect('/user/register/confirm')
+            current_site = get_current_site(request)
+            mail_subject = 'Activate your account.'
+            message = render_to_string('orders/email_confirmation.html', {
+                'user': user,
+                'domain': current_site.domain,
+                'uid': urlsafe_base64_encode(force_bytes(user.pk)),
+                'token': account_activation_token.make_token(user),
+            })
+            to_email = form.cleaned_data.get('email')
+            email = EmailMessage(mail_subject, message, EMAIL_HOST_USER, to=[to_email])
+            email.send()
+            return JsonResponse({'Status': True,
+                                 'Massage': 'Please confirm your email address to complete the registration'})
         else:
             return JsonResponse({'Status': False, 'Errors': form.errors})
 
 
 class ConfirmAccount(APIView):
-    def post(self, request, *args, **kwargs):
-
-        if {'email', 'token'}.issubset(request.data):
-
-            token = ConfirmEmailToken.objects.filter(user__email=request.data['email'],
-                                                     key=request.data['token']).first()
-            if token:
-                token.user.is_active = True
-                token.user.save()
-                token.delete()
-                return JsonResponse({'Status': True})
-            else:
-                return JsonResponse({'Status': False, 'Errors': 'Неправильно указан токен или email'})
-
-        return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+    def get(self, request, uidb64, token):
+        try:
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            user = CustomUser.objects.get(pk=uid)
+        except(TypeError, ValueError, OverflowError, CustomUser.DoesNotExist):
+            user = None
+        if user is not None and account_activation_token.check_token(user, token):
+            user.is_active = True
+            user.save()
+            login(request, user)
+            return JsonResponse({'Status': True,
+                                 'Massage': 'Thank you for your email confirmation. Now you can login your account.'})
+        else:
+            return JsonResponse({'Status': False, 'Error': 'Activation link is invalid!'})
 
 
 class PartnerUpdate(APIView):

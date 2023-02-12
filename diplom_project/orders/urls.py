@@ -8,7 +8,7 @@ urlpatterns = [
     path('', TemplateView.as_view(template_name='orders/home.html'), name='home'),
     path('user/', include('django.contrib.auth.urls')),
     path('user/register/', RegisterAccount.as_view(), name='user-register'),
-    path('user/register/confirm', ConfirmAccount.as_view(), name='user-register-confirm'),
+    path('user/register/confirm/<uidb64>/<token>', ConfirmAccount.as_view(), name='user-register-confirm'),
     path('partner/update', PartnerUpdate.as_view(), name='partner-update'),
 
 ]

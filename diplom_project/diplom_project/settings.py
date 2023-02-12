@@ -42,7 +42,6 @@ INSTALLED_APPS = [
 ]
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-# EMAIL_USE_TLS = True
 
 EMAIL_HOST = 'smtp.mail.ru'
 EMAIL_HOST_USER = ''
@@ -53,9 +52,9 @@ SERVER_EMAIL = EMAIL_HOST_USER
 
 AUTH_USER_MODEL = 'orders.CustomUser'
 
-LOGIN_REDIRECT_URL = 'home'
+#LOGIN_REDIRECT_URL = 'home'
 
-LOGOUT_REDIRECT_URL = 'home'
+#LOGOUT_REDIRECT_URL = 'home'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
