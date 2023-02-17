@@ -1,7 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-from django.contrib.auth.tokens import PasswordResetTokenGenerator
 
 
 STATE_CHOICES = (
@@ -178,10 +177,6 @@ class Order(models.Model):
 
     def __str__(self):
         return str(self.dt)
-
-    # @property
-    # def sum(self):
-    #     return self.ordered_items.aggregate(total=Sum("quantity"))["total"]
 
 
 class OrderItem(models.Model):

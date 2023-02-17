@@ -1,3 +1,5 @@
+from rest_framework.generics import ListAPIView
+from rest_framework.response import Response
 from yaml import load as load_yaml, Loader
 from requests import get
 from django.contrib.auth import login
@@ -11,11 +13,14 @@ from django.core.validators import URLValidator
 from django.http import JsonResponse
 from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
+from django.db.models import Q, Sum, F
 
-from orders.models import CustomUser, Shop, Category, ProductInfo, Product, Parameter, ProductParameter
+from orders.models import CustomUser, Shop, Category, ProductInfo, Product, Parameter, ProductParameter, Order
 from orders.forms import CustomUserCreationForm
 from orders.tokens import account_activation_token
 from diplom_project.settings import EMAIL_HOST_USER
+from orders.serializers import CategorySerializer, ShopSerializer, ProductInfoSerializer, OrderItemSerializer, \
+    OrderSerializer, ContactSerializer
 
 
 class RegisterAccount(APIView):
@@ -107,3 +112,34 @@ class PartnerUpdate(APIView):
                 return JsonResponse({'Status': True})
 
         return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+
+
+class PartnerOrders(APIView):
+
+    def get(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return JsonResponse({'Status': False, 'Error': 'Log in required'}, status=403)
+
+        if request.user.type != 'shop':
+            return JsonResponse({'Status': False, 'Error': 'Только для магазинов'}, status=403)
+
+        order = Order.objects.filter(
+            ordered_items__product_info__shop__user_id=request.user.id).exclude(state='basket').prefetch_related(
+            'ordered_items__product_info__product__category',
+            'ordered_items__product_info__product_parameters__parameter').select_related('contact').annotate(
+            total_sum=Sum(F('ordered_items__quantity') * F('ordered_items__product_info__price'))).distinct()
+
+        serializer = OrderSerializer(order, many=True)
+        return Response(serializer.data)
+
+
+class CategoryView(ListAPIView):
+
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+
+
+class ShopView(ListAPIView):
+
+    queryset = Shop.objects.filter(state=True)
+    serializer_class = ShopSerializer
